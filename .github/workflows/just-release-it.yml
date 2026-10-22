@@ -1,0 +1,28 @@
+name: 'Release with "📦 Just release it!"'
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "pyproject.toml"
+  workflow_dispatch:  # Allows to manually run the workflow, too
+
+permissions:
+  contents: write  # Necessary to publish a release
+
+jobs:
+  publish-release:
+    name: >-
+      📦 Just release it!
+    runs-on: ubuntu-latest
+    steps:
+      - name: ♻️ Check out code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0  # Critical for changelog + first-release support
+
+      - name: "📦 Just release it!"
+        id: just-release-it
+        # Also acts as a pre-release test: if fails, something's wrong
+        uses: Lex-DRL/just-release-it-action@main
