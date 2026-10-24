@@ -2,7 +2,12 @@
   
 # Standardize Version 🔢 Action
 
-**A GitHub action converting a version string into the standard format, suitable for release names/tags.**<br />
+[![GitHub Release][github-release-shield]][github-release-url]
+
+[github-release-shield]: https://img.shields.io/github/v/release/Lex-DRL/standardize-version-action?logo=github
+[github-release-url]: https://github.com/Lex-DRL/standardize-version-action/releases/latest
+
+*A GitHub action converting a version string into the standard format, suitable for release names/tags.*
 </div>
 
 - Handles `v` prefix.
