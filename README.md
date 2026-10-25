@@ -10,6 +10,11 @@
 *A GitHub action converting a version string into the standard format, suitable for release names/tags.*
 </div>
 
+> [!TIP]
+> If you're also looking for an action to actually do the release - here:
+> 
+> https://github.com/Lex-DRL/just-release-it-action (it uses `Standardize Version 🔢` internally)
+
 - Handles `v` prefix.
 - Designed to work with pythonic SemVer format, but supports any number of version segments. (`0.1`, `0.0.1`, `0.0.0.1`, ...)
 - Turns pre-release specifiers into human-readable names, while preserving other sub-version specifiers:
@@ -23,24 +28,26 @@
 
 ## Example Usage
 
-Add it as an intermediate step in your workflow job:
+Add it as an intermediate step in your workflow job *(replace `@main` with `@v1` if you prefer stable releases)*:
 ```yaml
 # Get a raw version from the source code - example for static version:
 - name: "➡️ Extract version from 'pyproject.toml'"
-  id: toml-version
-  uses: SebRollen/toml-action@main
-  with:
-    file: 'pyproject.toml'
-    field: 'project.version'
+  id: extract-version
+  uses: Lex-DRL/pyproject-toml-version-action@main
+  #with:
+  #  toml-file: 'pyproject.toml'
+  #  # Also installs python, so no need to reinstall it on the next step
 
 # Turn it to standard form:
 - name: "🔢 Standardize Version"
   id: standard-version
   uses: Lex-DRL/standardize-version-action@main
   with:
-    version: '${{ steps.toml-version.outputs.value }}'
+    version: '${{ steps.extract-version.outputs.value }}'
+    skip-python-setup: true
 
-# Use it - here, just print it to the log:
+# Use it - here, just print it to the log,
+# but normally you'd use it for a release:
 - name: "Echo standardized version"
   run: |
     echo 'The standard version: ${{ steps.standard-version.outputs.v }}' &&
