@@ -11,15 +11,17 @@ Handles:
   - PIP pre-releases (a1, b2, rc3) are converted to nicer alpha1, beta1, RC1.
 """
 
-import os
-import re
-import sys
 from typing import (
 	Any as _A, Callable as _C, Optional as _O, Union as _U,
 	Generator, Tuple, NamedTuple,
 	Match
 )
-from warnings import warn
+
+from dataclasses import dataclass as _dataclass, asdict as _asdict
+import os
+import re
+
+from _shared_utils import _cleanup_as_single_line, _EnvInputsABC, GithubOutput
 
 
 _T_Matcher = _C[[str], _O[Match[str]]]
@@ -33,12 +35,12 @@ _re_padded_int = re.compile(
 ).match
 
 
-class PadInt(NamedTuple):
+class _PadInt(NamedTuple):
 	number: int
 	pad: int = 0
 
 	@staticmethod
-	def parse(int_str: str) -> 'PadInt':
+	def parse(int_str: str) -> '_PadInt':
 		assert isinstance(int_str, str) and int_str.strip()
 		match = _re_padded_int(int_str)
 		if not match:
@@ -49,8 +51,8 @@ class PadInt(NamedTuple):
 		except IndexError:
 			int_group = None
 		if not int_group:
-			return PadInt(0, max(pad - 1, 0))
-		return PadInt(int(int_group), pad)
+			return _PadInt(0, max(pad - 1, 0))
+		return _PadInt(int(int_group), pad)
 
 	def format(self) -> str:
 		pad_str = '0' * max(self.pad, 0)
@@ -91,8 +93,8 @@ _re_suffix_seg = re.compile(  # Parse only suffix group into ASCII parts
 ).match
 
 
-class ParsedVersion(NamedTuple):
-	numbers: Tuple[PadInt, ...]
+class _ParsedVersion(NamedTuple):
+	numbers: Tuple[_PadInt, ...]
 	suffix: Tuple[str, ...] = tuple()
 
 	@staticmethod
@@ -111,7 +113,7 @@ class ParsedVersion(NamedTuple):
 				break
 
 	@staticmethod
-	def parse(version_str: str) -> 'ParsedVersion':
+	def parse(version_str: str) -> '_ParsedVersion':
 		# version_str = 'v.1.2.3a1 aaa'
 		# version_str = 'v.1.2.3'
 		assert isinstance(version_str, str) and version_str.strip()
@@ -124,20 +126,20 @@ class ParsedVersion(NamedTuple):
 		except IndexError:
 			suffix_group = ''
 
-		int_parse = PadInt.parse
+		int_parse = _PadInt.parse
 		numbers = tuple(
 			int_parse(x) for x in
-			ParsedVersion.__parse_group_parts(num_group, _re_number_seg)
+			_ParsedVersion.__parse_group_parts(num_group, _re_number_seg)
 		)
 		suffix_parts = tuple(
-			ParsedVersion.__parse_group_parts(suffix_group, _re_suffix_seg, 'suffix')
+			_ParsedVersion.__parse_group_parts(suffix_group, _re_suffix_seg, 'suffix')
 		)
-		return ParsedVersion(numbers, suffix_parts)
+		return _ParsedVersion(numbers, suffix_parts)
 
-# ParsedVersion.parse('v.0.00.01.020.00300a1 aaa')
-# ParsedVersion.parse('v0')
-# ParsedVersion.parse('0')
-# ParsedVersion.parse('v0.001b1')
+# _ParsedVersion.parse('v.0.00.01.020.00300a1 aaa')
+# _ParsedVersion.parse('v0')
+# _ParsedVersion.parse('0')
+# _ParsedVersion.parse('v0.001b1')
 
 
 # https://peps.python.org/pep-0440/#pre-releases
@@ -168,114 +170,79 @@ def _convert_pre_v(suffix: str) -> str:
 	return suffix
 
 
-def _write_output(
-	output: _T_Path = './TEST_GITHUB_OUTPUT',
-	**names_and_values
-) -> None:
-	"""Write variables to GitHub output."""
-	with open(output, "a", encoding="utf-8") as f:
-		f.writelines(
-			f"{name}={value}\n"
-			for name, value in names_and_values.items()
-		)
-
-
-def _cleanup_version_arg(version_arg: _A, sysarg_id=1) -> str:
-	ver_str = version_arg
+def _validate_input_version(input_version) -> str:
+	ver_str = input_version
 	if not ver_str:
-		ver_str = sys.argv[sysarg_id] if len(sys.argv) > sysarg_id else None
-	if not ver_str:
-		raise ValueError("Version string is required")
+		raise ValueError("Input-version string is required")
 	if not isinstance(ver_str, str):
-		ver_str = str(ver_str)
-
-	# In case someone passes multiline string:
-	non_empty_lines = (
-		x for x in (
-			seg.strip() for seg in ver_str.splitlines()
-		) if x
-	)
-	try:
-		return next(non_empty_lines)
-	except StopIteration:
-		pass
-	raise ValueError(f"Version string contains nothing but whitespaces: {version_arg!r}")
+		raise TypeError(f"Input-version isn't a string: {ver_str!r}")
+	ver_str = _cleanup_as_single_line(ver_str)
+	if not ver_str:
+		raise ValueError(f"Input-version string contains nothing but whitespaces: {input_version!r}")
+	return ver_str
 
 
-def _cleanup_output_arg(output_arg: _A, sysarg_id=2) -> _T_Path:
-	output = output_arg
-	if not(output is None or isinstance(output, (str, os.PathLike))):
-		output = str(output)
-	if not output:
-		print(
-			f"No output path ({output!r}) is specified as function argument - checking if argument is passed to the script..."
+@_dataclass
+class EnvInputs(_EnvInputsABC):
+	"""Script 'arguments' passed as env-vars (for security reasons)."""
+	input_version: str
+
+	def __post_init__(self):
+		self.input_version = _validate_input_version(self.input_version)
+
+
+@_dataclass
+class Outputs:
+	v: str
+	full: str
+	number: str
+	suffix: str
+	is_pre: str  # Not a bool, but "GitHub-var-bool-like" string
+
+	@classmethod
+	def from_input_version(
+		cls,
+		input_version: str,
+		number_sep='.', parts_sep='-', suffix_internal_sep='-', convert_pre=True,
+	) -> 'Outputs':
+		parsed_version = _ParsedVersion.parse(input_version)
+		numbers = parsed_version.numbers
+		suffix_parts = parsed_version.suffix
+
+		suffix_converted = tuple(_convert_pre_v(x) for x in suffix_parts)
+		is_pre_str = 'true' if (
+			suffix_converted and _pre_v_matcher(suffix_converted[0])
+		) else 'false'
+
+		base = number_sep.join(pad_i.format() for pad_i in numbers)
+		suffix = suffix_internal_sep.join(
+			suffix_converted if convert_pre else suffix_parts
 		)
-		output = sys.argv[sysarg_id] if len(sys.argv) > sysarg_id else None
-	if not output:
-		print(
-			f"No output path ({output!r}) is passed to the script - checking 'GITHUB_OUTPUT' env var..."
-		)
-		try:
-			output = os.environ.get("GITHUB_OUTPUT")
-		except Exception:
-			output = None
-	if not output:
-		raise ValueError(f"Output must be specified in SOME way. Got: {output!r}")
-	assert isinstance(output, (str, os.PathLike)) and output
 
-	output_str = str(output)
+		full_version = f'{base}{parts_sep}{suffix}' if suffix else base
+		v_version = f'v{full_version}'
 
-	# In case someone passes multiline string:
-	non_empty_lines = (x for x in output_str.splitlines() if x)
-	try:
-		first_valid_line = next(non_empty_lines)
-	except StopIteration:
-		raise ValueError(f"Output path contains nothing but newline characters: {output!r}")
-	if not output_str.strip():
-		warn(f"Output path contains nothing but whitespaces: {output!r}", RuntimeWarning)
-	return first_valid_line if first_valid_line != output_str else output
+		return cls(v=v_version, full=full_version, number=base, suffix=suffix, is_pre=is_pre_str)
 
 
-def main(
-	version: str = None, output: _O[_T_Path] = None,
-	number_sep='.', parts_sep='-', suffix_internal_sep='-',
-	convert_pre=True,
-) -> None:
-	clean_output = _cleanup_output_arg(output)
-	version_str = _cleanup_version_arg(version)
-	parsed_version = ParsedVersion.parse(version_str)
-	numbers = parsed_version.numbers
-	suffix_parts = parsed_version.suffix
+def main(github_output_env: str = 'GITHUB_OUTPUT') -> None:
+	env_args = EnvInputs.from_env()
+	# env_args.print()
+	print(f"🧩 Parsed version: {env_args.input_version!r}")
 
-	suffix_converted = tuple(_convert_pre_v(x) for x in suffix_parts)
-	is_pre_str = 'true' if (
-		suffix_converted and _pre_v_matcher(suffix_converted[0])
-	) else 'false'
-
-	base = number_sep.join(pad_i.format() for pad_i in numbers)
-	suffix = suffix_internal_sep.join(
-		suffix_converted if convert_pre else suffix_parts
-	)
-
-	full_version = f'{base}{parts_sep}{suffix}' if suffix else base
-	v_version = f'v{full_version}'
+	outputs = Outputs.from_input_version(env_args.input_version)
 
 	# Log all the extracted parts for the action runner:
-	print(f"🧩 Parsed version: {version_str!r}")
-	print(f"   ├ 🏷️ 'v'      → {v_version}")
-	print(f"   ├ full        →  {full_version}")
-	print(f"   ├ number      →  {base}")
-	print(f"   ├ suffix      → {suffix!r}")
-	print(f"   └ is-pre      →  {is_pre_str}")
+	print(f"   ├ 🏷️ 'v'      → {outputs.v}")
+	print(f"   ├ full        →  {outputs.full}")
+	print(f"   ├ number      →  {outputs.number}")
+	print(f"   ├ suffix      → {outputs.suffix!r}")
+	print(f"   └ is-pre      →  {outputs.is_pre}")
 
-	_write_output(
-		clean_output,
-		v=v_version,
-		full=full_version,
-		number=base,
-		suffix=suffix,
-		is_pre=is_pre_str,
+	GithubOutput(github_output_env=github_output_env, do_print=False).set(
+		**_asdict(outputs)
 	)
+
 	print(f"✅ Outputs set")
 
 
