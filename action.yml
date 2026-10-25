@@ -47,7 +47,9 @@ runs:
       uses: actions/setup-python@v7
       with:
         python-version: ${{ inputs.python-version }}
-#        cache: 'pip'
+        # cache: 'pip' # Pointless here: no pip dependencies.
+        # # Even if there were some, but they were tiny - gives no benefit,
+        # # but can break stuff in complicated setup scenarios
 
 #    - name: Install PIP requirements
 #      shell: bash
