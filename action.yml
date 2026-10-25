@@ -56,4 +56,4 @@ runs:
     - name: Parse and standardize version 🔢
       id: standardize
       shell: bash
-      run: python '${{ github.action_path }}/standardize_version.py' '${{ inputs.version }}' "$GITHUB_OUTPUT"
+      run: python '${{ github.action_path }}/standardize-version.py' '${{ inputs.version }}' "$GITHUB_OUTPUT"
