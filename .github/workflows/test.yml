@@ -1,0 +1,77 @@
+name: '🔬 Test'
+
+on:
+  workflow_dispatch:  # Allows to manually run the workflow, too
+  workflow_call:  # Make the workflow reusable in other workflows
+    inputs:
+      concurrency_group_id:
+        description: >-
+          Should be set to some non-empty string - to differentiate from direct test-workflow triggers
+          + to let callers define their own groups.
+        required: false
+        type: string
+        default: 'called'  # Empty for other trigger events (in this workflow)
+
+# ====== CONCURRENCY ======
+
+# Prevent multiple simultaneous builds for the same version:
+concurrency:
+  # group: test-${{ inputs.concurrency_group_id }}-${{ github.event_name }}-${{ github.event.pull_request.number || github.sha }}
+  group: test-${{ inputs.concurrency_group_id }}-${{ github.event_name }}
+  # cancel-in-progress: false  # the second pending run is put into a queue, the third one is cancelled (GitHub limitation)
+  cancel-in-progress: ${{ inputs.concurrency_group_id == '' }}  # Cancel running for direct triggers
+
+# ========= JOBS =========
+
+permissions:
+  contents: read
+
+jobs:
+
+  test:
+    name: "Test"
+    # needs: [build]
+
+    # Just to be nice with forked repos made solely for a PR - let's run only if:
+    # - it's an original repo and NOT a fork
+    # - or it was triggered manually
+    # - or called (reused) from another workflow
+    if: |
+      github.repository_owner == 'Lex-DRL' ||
+      github.event_name == 'workflow_dispatch' ||
+      github.event_name == 'workflow_call'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5  # Prevent stuck jobs
+
+    steps:
+    - name: "Try 1"
+      id: try1
+      uses: Lex-DRL/standardize-version-action@main
+      with:
+         version: '0.0.0a0'
+         #skip-python-setup: true
+
+    - name: "Try 2"
+      id: try2
+      uses: Lex-DRL/standardize-version-action@main
+      with:
+         version: '1.2.3'
+         skip-python-setup: true
+
+    - name: "Try 3"
+      id: try3
+      uses: Lex-DRL/standardize-version-action@main
+      with:
+         version: '1.0.0rc1'
+         skip-python-setup: true
+
+    - name: "Try 4"
+      id: try4
+      uses: Lex-DRL/standardize-version-action@main
+      with:
+         version: '99.99.99.b'
+         skip-python-setup: true
+
+    - name: "Test print"
+      run: |
+        echo 'Extracted version: ${{ steps.try3.outputs.v }}'
