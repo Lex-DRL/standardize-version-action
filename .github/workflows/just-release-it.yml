@@ -6,7 +6,6 @@ on:
       - main
     paths:
       - "pyproject.toml"
-  workflow_dispatch:  # Allows to manually run the workflow, too
   workflow_call:  # Make the workflow reusable in other workflows
     inputs:
       concurrency_group_id:
@@ -16,6 +15,7 @@ on:
         required: false
         type: string
         default: 'called'  # Empty for other trigger events (in this workflow)
+  workflow_dispatch:  # Allows to manually run the workflow, too
 
 # ====== CONCURRENCY ======
 
