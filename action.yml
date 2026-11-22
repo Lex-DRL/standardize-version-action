@@ -41,23 +41,26 @@ outputs:
 
 runs:
   using: "composite"
+
   steps:
-    - name: 🐍 Set up Python
-      if: inputs.skip-python-setup == 'false' || inputs.skip-python-setup == ''
-      uses: actions/setup-python@v7
-      with:
-        python-version: ${{ inputs.python-version }}
-        # cache: 'pip' # Pointless here: no pip dependencies.
-        # # Even if there were some, but they were tiny - gives no benefit,
-        # # but can break stuff in complicated setup scenarios
+  - name: 🐍 Set up Python
+    if: inputs.skip-python-setup == 'false' || inputs.skip-python-setup == ''
+    uses: actions/setup-python@v7
+    with:
+      python-version: ${{ inputs.python-version }}
+      # cache: 'pip' # Pointless here: pip dependencies are tiny.
+      # # Even if there were some, but they were tiny - gives no benefit,
+      # # but can break stuff in complicated setup scenarios
 
-#    - name: Install PIP requirements
-#      shell: bash
-#      run: pip install tomli
+  - name: 📥 Install PIP requirements
+    shell: bash
+    run: >-
+      python -m pip install
+      "standard-version >= 1.0.0"
 
-    - name: Parse and standardize version 🔢
-      id: standardize
-      shell: bash
-      env:
-        input_version: ${{ inputs.version }}
-      run: python '${{ github.action_path }}/standardize-version.py'
+  - name: Parse and standardize version 🔢
+    id: standardize
+    shell: bash
+    env:
+      input_version: ${{ inputs.version }}
+    run: python '${{ github.action_path }}/standardize-version.py'
